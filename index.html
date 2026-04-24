@@ -20,7 +20,6 @@
             padding: 15px 25px; border-radius: 0; display: block;
         }
 
-        /* --- 工具列佈局 --- */
         .side-panel { position: fixed; z-index: 1001; }
 
         @media (min-width: 769px) {
@@ -55,7 +54,6 @@
             .side-panel.open .panel-content { transform: translateY(0); }
         }
 
-        /* --- UI 元件 --- */
         .section-title { font-size: 14px; font-weight: bold; margin-top: 15px; border-left: 4px solid var(--primary); padding-left: 8px; margin-bottom: 8px; }
         .btn-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 10px 0; }
         .btn { padding: 8px 2px; border: none; border-radius: 0; cursor: pointer; font-size: 11px; font-weight: bold; text-align: center; color: white; width: 100%; transition: 0.2s; }
@@ -63,18 +61,20 @@
         .btn-save { background: #27ae60; }
         .btn-load { background: #2980b9; }
         .btn-toggle { background: #e67e22; grid-column: span 3; margin-top: 5px; }
-        .btn:active { transform: scale(0.95); opacity: 0.8; }
 
         .input-group { background: #f4f4f4; padding: 10px; margin-bottom: 10px; }
         .input-group input { width: 100%; padding: 8px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 0; font-size: 13px; }
         .btn-add { background: var(--primary); color: white; width: 100%; padding: 8px; border: none; font-weight: bold; cursor: pointer; }
         
         #country-list { list-style: none; padding: 0; margin: 0; }
-        #country-list li { padding: 10px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; font-size: 14px; cursor: pointer; }
-        #country-list li:hover { background: #f8f9fa; }
+        #country-list li { padding: 12px 10px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; font-size: 14px; cursor: pointer; }
         
-        /* 修正點：讓名稱可編輯的視覺提示 */
-        .editable-name { border-bottom: 1px dashed #ccc; padding-bottom: 1px; }
+        /* 編輯按鈕樣式 */
+        .edit-icon { 
+            color: var(--primary); font-size: 16px; padding: 5px; 
+            margin-left: 10px; opacity: 0.6;
+        }
+        .edit-icon:hover { opacity: 1; }
 
         .popup-btn { background: var(--primary); color: white; border: none; padding: 10px; border-radius: 0; margin-top: 8px; cursor: pointer; width: 100%; }
         select { border-radius: 0; padding: 5px; border: 1px solid #ccc; font-size: 13px; }
@@ -90,7 +90,7 @@
 </head>
 <body>
 
-<div id="loader">🌍 地圖資料載入中...</div>
+<div id="loader">🌍 地圖載入中...</div>
 <div id="map"></div>
 
 <div class="side-panel" id="ui-panel">
@@ -107,7 +107,7 @@
         </div>
 
         <div class="section-title">🎨 地圖風格</div>
-        <div style="display: flex; gap: 5px; margin-top:5px;">
+        <div style="display: flex; gap: 5px;">
             <select id="bg-color-select" onchange="updateStyles()" style="flex:1;">
                 <option value="#d1ecf1" selected>海洋：藍</option>
                 <option value="#333333">海洋：黑</option>
@@ -126,7 +126,7 @@
             <button class="btn btn-toggle" id="label-toggle-btn" onclick="toggleLabels()">🏷️ 隱藏名稱標籤</button>
         </div>
 
-        <div class="section-title">🚩 已去過 (雙擊名稱可編輯)</div>
+        <div class="section-title">🚩 已去過 (點擊 ✎ 編輯名稱)</div>
         <ul id="country-list"></ul>
 
         <div class="copyright">Copyright © Titleman Cloud</div>
@@ -135,8 +135,6 @@
 </div>
 
 <script>
-// --- 資料載入 ---
-// 修改資料結構：visitedCountries 現在儲存的是 {originalName: "原本名稱", customName: "自定義名稱"} 的物件陣列
 let visitedCountries = JSON.parse(localStorage.getItem('myVisitedCountries')) || [];
 let customPOIs = JSON.parse(localStorage.getItem('myCustomPOIs')) || [
     { name: "Guam (關島)", coords: [13.4443, 144.7937] },
@@ -145,13 +143,11 @@ let customPOIs = JSON.parse(localStorage.getItem('myCustomPOIs')) || [
 let showLabels = true; 
 let geoLayer, poiLayers = L.layerGroup(), labelLayer = L.layerGroup(), lineLayer = L.layerGroup();
 
-// 相容性處理：如果使用者有舊版資料（單純的字串陣列），自動轉換成新格式
+// 自動修正舊資料格式
 if (visitedCountries.length > 0 && typeof visitedCountries[0] === 'string') {
     visitedCountries = visitedCountries.map(name => ({ originalName: name, customName: name }));
-    localStorage.setItem('myVisitedCountries', JSON.stringify(visitedCountries));
 }
 
-// --- 初始化地圖 ---
 const map = L.map('map', { 
     attributionControl: false, zoomSnap: 0.1, zoomControl: false, 
     maxBounds: [[-90, -200], [90, 200]], maxBoundsViscosity: 1.0 
@@ -195,14 +191,11 @@ fetch('https://raw.githubusercontent.com/datasets/geo-boundaries-world-110m/mast
         updateUI();
     });
 
-// --- 功能核心 ---
-// 輔助函式：根據原始名稱獲取目前的自定義名稱
 function getCustomName(originalName) {
     const found = visitedCountries.find(c => c.originalName === originalName);
     return found ? found.customName : originalName;
 }
 
-// 輔助函式：判斷某原始名稱是否已被標記
 function isCountryVisited(originalName) {
     return visitedCountries.some(c => c.originalName === originalName);
 }
@@ -217,7 +210,7 @@ function styleFunc(feature) {
 
 function showPopup(latlng, originalName) {
     const visited = isCountryVisited(originalName);
-    const displayName = getCustomName(originalName); // 彈窗顯示自定義名稱
+    const displayName = getCustomName(originalName);
     const btnText = visited ? "❌ 移除足跡" : "✅ 標記足跡";
     L.popup()
         .setLatLng(latlng)
@@ -230,33 +223,29 @@ function toggleCountry(originalName) {
     if (index > -1) {
         visitedCountries.splice(index, 1);
     } else {
-        // 新增時，自定義名稱預設與原始名稱相同
         visitedCountries.push({ originalName: originalName, customName: originalName });
     }
     saveData(); updateUI(); map.closePopup();
 }
 
-// 修正點：新增編輯名稱的邏輯
+// 修正點：手機版專用的編輯觸發
 function editCountryName(originalName) {
     const currentCustomName = getCustomName(originalName);
-    // 預填目前的名稱供使用者修改
-    const newName = prompt(`為 "${originalName}" 新增備註文字 (或修改名稱)：`, currentCustomName);
+    const newName = prompt(`編輯 "${originalName}" 的顯示名稱：`, currentCustomName);
     
-    if (newName === null) return; // 使用者點擊取消
-
-    const country = visitedCountries.find(c => c.originalName === originalName);
-    if (country) {
-        // 如果輸入空值，還原為原始名稱，否則存入新名稱
-        country.customName = newName.trim() === "" ? originalName : newName.trim();
-        saveData();
-        updateUI(); // 更新介面與地圖標籤
+    if (newName !== null) {
+        const country = visitedCountries.find(c => c.originalName === originalName);
+        if (country) {
+            country.customName = newName.trim() === "" ? originalName : newName.trim();
+            saveData();
+            updateUI();
+        }
     }
 }
 
 function toggleLabels() {
     showLabels = !showLabels;
-    const btn = document.getElementById('label-toggle-btn');
-    btn.innerText = showLabels ? "🏷️ 隱藏名稱標籤" : "🏷️ 顯示名稱標籤";
+    document.getElementById('label-toggle-btn').innerText = showLabels ? "🏷️ 隱藏名稱標籤" : "🏷️ 顯示名稱標籤";
     updateUI();
 }
 
@@ -264,62 +253,33 @@ function drawSmartLabels() {
     labelLayer.clearLayers();
     lineLayer.clearLayers();
     if (!showLabels || !geoLayer) return;
-
     const usedSpaces = [];
-
-    // 1. 處理 GeoJSON 國家
     geoLayer.eachLayer(layer => {
         const originalName = layer.feature.properties.name;
         if (!isCountryVisited(originalName)) return;
-
-        const displayName = getCustomName(originalName); // 地圖標籤顯示自定義名稱
+        const displayName = getCustomName(originalName);
         const bounds = layer.getBounds();
-        const center = bounds.getCenter();
-        
-        const latSpan = bounds.getNorth() - bounds.getSouth();
-        const lngSpan = bounds.getEast() - bounds.getWest();
-        
-        createLabel(center, displayName, usedSpaces, latSpan < 5 || lngSpan < 5);
+        createLabel(bounds.getCenter(), displayName, usedSpaces, (bounds.getNorth() - bounds.getSouth()) < 5);
     });
-
-    // 2. 處理自定義 POIs
     customPOIs.forEach(poi => {
-        // POI 本身的名稱就是可變的，直接顯示
-        if (isCountryVisited(poi.name)) {
-            createLabel(L.latLng(poi.coords), poi.name, usedSpaces, true);
-        }
+        if (isCountryVisited(poi.name)) createLabel(L.latLng(poi.coords), poi.name, usedSpaces, true);
     });
 }
 
 function createLabel(center, name, usedSpaces, isSmall) {
     let labelPos = center;
     let needLine = false;
-
-    if (isSmall || checkOverlap(center, usedSpaces)) {
+    if (isSmall || usedSpaces.some(u => Math.abs(u.lat - center.lat) < 2 && Math.abs(u.lng - center.lng) < 5)) {
         const zoom = map.getZoom();
         const offset = 10 / Math.pow(2, zoom - 2); 
         labelPos = L.latLng(center.lat + offset, center.lng + (offset * 1.5));
         needLine = true;
     }
-
     usedSpaces.push(labelPos);
-
-    if (needLine) {
-        L.polyline([center, labelPos], { color: '#333', weight: 1, dashArray: '3,3', opacity: 0.5 }).addTo(lineLayer);
-    }
-
+    if (needLine) L.polyline([center, labelPos], { color: '#333', weight: 1, dashArray: '3,3', opacity: 0.5 }).addTo(lineLayer);
     L.marker(labelPos, {
-        icon: L.divIcon({
-            className: 'country-label',
-            html: name,
-            iconSize: null,
-            iconAnchor: [-2, 10]
-        })
+        icon: L.divIcon({ className: 'country-label', html: name, iconSize: null, iconAnchor: [-2, 10] })
     }).addTo(labelLayer);
-}
-
-function checkOverlap(pos, used) {
-    return used.some(u => Math.abs(u.lat - pos.lat) < 2 && Math.abs(u.lng - pos.lng) < 5);
 }
 
 function addNewPOI() {
@@ -328,13 +288,10 @@ function addNewPOI() {
     const lng = parseFloat(document.getElementById('poi-lng').value);
     if (!name || isNaN(lat) || isNaN(lng)) return alert("資訊不完整！");
     customPOIs.push({ name: name, coords: [lat, lng] });
-    // 預設將自定義地點加入已去過清單
-    if (!isCountryVisited(name)) {
-        visitedCountries.push({ originalName: name, customName: name });
-    }
+    if (!isCountryVisited(name)) visitedCountries.push({ originalName: name, customName: name });
     saveData(); updateUI();
     document.getElementById('poi-name').value = '';
-    alert("地點已新增並標記！");
+    alert("地點已新增！");
 }
 
 function drawCustomMarkers() {
@@ -362,14 +319,12 @@ function updateUI() {
     if (geoLayer) geoLayer.setStyle(styleFunc);
     drawCustomMarkers();
     drawSmartLabels(); 
-    
-    // 修正點：更新清單顯示，加入雙擊編輯功能
     const listEl = document.getElementById('country-list');
     listEl.innerHTML = visitedCountries.length > 0 
         ? visitedCountries.map(c => 
-            `<li onclick="focusCountry('${c.originalName}')" ondblclick="editCountryName('${c.originalName}'); L.DomEvent.stopPropagation(event);">
-                <span class="editable-name">📍 ${c.customName}</span>
-                <span style="color:#aaa; font-size:11px; margin-left:5px;">(${c.originalName})</span>
+            `<li onclick="focusCountry('${c.originalName}')">
+                <span>📍 ${c.customName}</span>
+                <span class="edit-icon" onclick="event.stopPropagation(); editCountryName('${c.originalName}')">✎</span>
             </li>`
         ).join('') 
         : '<li style="color:#999; justify-content:center;">尚未標記任何足跡</li>';
@@ -384,7 +339,6 @@ function focusCountry(name) {
             found = true;
         }
     });
-    // 如果是 POI
     if (!found) {
         const poi = customPOIs.find(p => p.name === name);
         if (poi) map.flyTo(poi.coords, 7, { duration: 1.2 });
@@ -402,10 +356,12 @@ function togglePanel() {
 function resetView() { autoFitWorld(); }
 function exportBackup() {
     const data = { v: visitedCountries, p: customPOIs };
-    navigator.clipboard.writeText(JSON.stringify(data)).then(() => alert("✅ 備份複製成功！"));
+    const str = JSON.stringify(data);
+    saveData(); // 備份前強制再存檔一次確保同步
+    navigator.clipboard.writeText(str).then(() => alert("✅ 最新資料已複製到剪貼簿！"));
 }
 function triggerImport() {
-    const code = prompt("請貼上代碼：");
+    const code = prompt("請貼上備份代碼：");
     if (code) {
         try {
             const data = JSON.parse(code);
@@ -416,7 +372,6 @@ function triggerImport() {
     }
 }
 function updateStyles() { updateUI(); }
-
 map.on('zoomend', drawSmartLabels);
 </script>
 </body>
